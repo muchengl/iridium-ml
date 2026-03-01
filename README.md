@@ -1,8 +1,66 @@
-# Tracing-based ML DSL Demo
+# Iridium
 
-This repository is a minimal runnable tracing-style ML DSL demo. Users write kernels in Python, and the first call triggers Proxy tracing to build an SSA graph IR, emits a tiny textual MLIR module, then executes it with a custom MLIR-subset interpreter backed by NumPy. JIT cache and shape/dtype guards are used to reuse compiled variants.
+**iridium** is a compact, tracing-based ML compiler in Python 3.11.
+It demonstrates the full forward path of a tiny compiler stack:
+Python kernel -> Proxy tracing -> SSA Graph IR -> textual MLIR -> custom MLIR interpreter (NumPy backend).
 
-## Run
+This project is intentionally minimal, but the core architecture matches what a larger ML compiler/runtime system would need.
+
+## Why This Project
+
+`iridium` is designed as a practical skeleton for experimenting with ML system ideas:
+
+- Frontend tracing with tensor metadata only (shape/dtype)
+- Explicit graph IR with verification
+- Debug-friendly graph introspection
+- Deterministic textual IR generation (MLIR-like)
+- End-to-end execution through an interpreter
+- JIT cache with input guards
+
+## Features
+
+- Proxy-based tracing (`ProxyTensor`, `Tracer`)
+- SSA Graph IR (`Value`, `Node`, `Graph`)
+- Static shape and dtype inference
+- Supported ops (MVP):
+  - elementwise: `add`, `mul`
+  - unary: `relu`
+  - reduction: `reduce_mean(axis, keepdim)`
+  - linear algebra: `matmul` (2D)
+- Graph debug tools:
+  - `graph.pretty()`
+  - `graph.to_dot(path)`
+  - trace logs via `@jit(trace=True)`
+- MLIR textual emission (`toy.*` op subset)
+- Lightweight MLIR-subset interpreter (no LLVM / official MLIR runtime)
+- JIT compile cache keyed by function name + input shapes/dtypes
+
+## Repository Layout
+
+```text
+repo/
+  README.md
+  pyproject.toml
+  dsl/
+    __init__.py
+    tensor.py
+    meta.py
+    graph.py
+    tracer.py
+    jit.py
+    debug.py
+    mlir_emit.py
+    mlir_interp.py
+  examples/
+    demo_frontend.py
+    demo_mlir.py
+  tests/
+    test_demo.py
+    kernel_cases/
+    expected_outputs/
+```
+
+## Quick Start
 
 ```bash
 python examples/demo_frontend.py
@@ -10,9 +68,37 @@ python examples/demo_mlir.py
 pytest -q
 ```
 
+## Frontend Kernel Style
+
+`iridium` aims to feel close to NumPy/PyTorch-style authoring:
+
+1. Elementwise + broadcast:
+   `y = relu(x * w + b)`
+2. Reduction:
+   `y = mean(x, axis=1, keepdim=True)`
+3. Matmul + activation:
+   `y = relu(x @ w + b)`
+
+These are implemented in `examples/demo_frontend.py` with `@jit`.
+
+## Execution Flow
+
+On first call to a jitted kernel:
+
+1. Build placeholders from input metadata (`shape`, `dtype`)
+2. Trace Python ops into Graph IR
+3. Verify graph
+4. Emit textual MLIR (`module` + `func.func` + `toy.*` ops)
+5. Parse and run with the custom interpreter
+6. Cache compiled program under guard key
+
+On second call with the same input signature:
+
+- Guard passes -> cache hit -> skip retracing/re-emission
+
 ## Dynamic Test Cases
 
-Tests are organized as dynamically loaded practical kernel cases:
+Tests are dynamically discovered and validated:
 
 - Kernel definitions: `tests/kernel_cases/*.py`
 - Expected outputs: `tests/expected_outputs/*.json`
@@ -20,35 +106,26 @@ Tests are organized as dynamically loaded practical kernel cases:
 
 Current practical kernels:
 
-- `featurewise_affine_relu`: per-feature affine transform + ReLU
-- `mlp_block`: two-layer MLP block
-- `mean_pool_head`: mean pooling + linear head + ReLU
-- `gated_fusion_block`: gated/value branches with elementwise fusion
+- `featurewise_affine_relu`
+- `mlp_block`
+- `mean_pool_head`
+- `gated_fusion_block`
 
-Each `kernel_cases/*.py` module must expose:
+Each kernel case module exposes:
 
 - `CASE_NAME`
 - `get_numpy_inputs()`
-- `kernel(...)` (decorated with `@jit`)
+- `kernel(...)` (with `@jit`)
 - `eager_numpy(inputs)`
 - `to_tensor_args(inputs)`
 
-`tests/test_demo.py` automatically:
+The test runner checks:
 
-- scans kernel cases
-- matches the expected JSON with the same case name
-- checks first-run cache miss and second-run cache hit
-- validates DSL outputs against eager and expected values
+- first-run compile/cache miss
+- second-run cache hit
+- numeric match vs eager + expected output files
 
-## Key Concepts
-
-- Proxy tracing: `ProxyTensor` intercepts `+/*/@/relu/mean` during function execution and records `Node`s.
-- Graph IR: `Graph(inputs, nodes, outputs)` where each `Value` is SSA and carries `MetaTensor(shape, dtype)`.
-- MLIR emit: `dsl/mlir_emit.py` converts the graph into textual IR with `module + func.func + toy.*`.
-- MLIR interp: `dsl/mlir_interp.py` parses and interprets that MLIR subset.
-- Cache & guards: `@jit` uses `(fn_qualname, dtypes, shapes)` as the key and validates reuse with shape/dtype guards.
-
-## Example graph.pretty output
+## Example Graph IR (`graph.pretty()`)
 
 ```text
 graph(
@@ -63,7 +140,7 @@ graph(
 }
 ```
 
-## Example MLIR output
+## Example Emitted MLIR
 
 ```mlir
 module {
@@ -75,3 +152,21 @@ module {
   }
 }
 ```
+
+## Scope and Limits
+
+- Forward-only demo (no autograd, no training)
+- Static shapes only
+- CPU only
+- NumPy for runtime numerics
+- Interpreter supports only the emitted MLIR subset
+
+## Next Extensions
+
+Natural directions if you want to evolve `iridium`:
+
+1. Add constants and literal handling in IR/MLIR
+2. Add more ops (`sub`, `div`, `exp`, `softmax`, `layernorm`)
+3. Add simple optimization passes (constant folding, dead code elimination)
+4. Add multi-output function support
+5. Add a lower-level backend target beyond the interpreter
