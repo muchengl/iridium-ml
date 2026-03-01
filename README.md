@@ -24,9 +24,11 @@ This project is intentionally minimal, but the core architecture matches what a 
 - Static shape and dtype inference
 - Supported ops (MVP):
   - elementwise: `add`, `mul`
-  - unary: `relu`
+  - unary: `relu`, `tanh`
   - reduction: `reduce_mean(axis, keepdim)`
   - linear algebra: `matmul` (2D)
+  - CNN: `conv2d` (NCHW), `avg_pool2d`, `max_pool2d`
+  - shape: `flatten`, `reshape`
 - Graph debug tools:
   - `graph.pretty()`
   - `graph.to_dot(path)`
@@ -54,6 +56,8 @@ repo/
   examples/
     demo_frontend.py
     demo_mlir.py
+    demo_lenet5.py
+    lenet5_mnist_benchmark.py
   tests/
     test_demo.py
     kernel_cases/
@@ -65,6 +69,7 @@ repo/
 ```bash
 python examples/demo_frontend.py
 python examples/demo_mlir.py
+python examples/demo_lenet5.py
 pytest -q
 ```
 
@@ -110,6 +115,7 @@ Current practical kernels:
 - `mlp_block`
 - `mean_pool_head`
 - `gated_fusion_block`
+- `lenet5_like`
 
 Each kernel case module exposes:
 
@@ -170,3 +176,48 @@ Natural directions if you want to evolve `iridium`:
 3. Add simple optimization passes (constant folding, dead code elimination)
 4. Add multi-output function support
 5. Add a lower-level backend target beyond the interpreter
+6. Add lower-level backend and scheduling passes for better LeNet/CNN performance
+
+## LeNet-5 Support
+
+LeNet-5 style forward is now supported in the DSL frontend and IR stack.
+
+- Frontend API:
+  - `conv2d(x, w, b=None, stride=1, padding=0)`
+  - `avg_pool2d(x, kernel=2, stride=2)`
+  - `max_pool2d(x, kernel=2, stride=2)` (for common modern LeNet variants)
+  - `flatten(x, start_dim=1, end_dim=-1)`
+  - `reshape(x, *shape)`
+  - `tanh(x)` / `relu(x)`
+- IR ops:
+  - `conv2d`, `avg_pool2d`, `max_pool2d`, `flatten`, `reshape`, `tanh`
+- Examples and tests:
+  - `examples/demo_lenet5.py`
+  - `tests/kernel_cases/lenet5_like.py`
+  - `tests/expected_outputs/lenet5_like.json`
+
+## Online LeNet-5 + MNIST Benchmark
+
+`examples/lenet5_mnist_benchmark.py` downloads:
+
+- a LeNet-style `.pth` checkpoint from the internet
+- the MNIST test set
+
+Then it runs inference with the DSL kernel and reports:
+
+- first-run latency (compile + run)
+- steady-state latency
+- throughput
+- top-1 accuracy on the sampled batch
+
+Install optional deps first:
+
+```bash
+pip install torch torchvision
+```
+
+Run benchmark:
+
+```bash
+python examples/lenet5_mnist_benchmark.py --num-samples 256 --iters 5
+```

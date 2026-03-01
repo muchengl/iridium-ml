@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from .tensor import _conv2d_nchw, _infer_reshape, _normalize_flatten_dims, _pool2d_nchw
 
 
 @dataclass
@@ -36,6 +37,8 @@ class ParsedProgram:
                 out = vals[0] * vals[1]
             elif inst.op == "toy.relu":
                 out = np.maximum(vals[0], 0)
+            elif inst.op == "toy.tanh":
+                out = np.tanh(vals[0])
             elif inst.op == "toy.matmul":
                 if vals[0].ndim != 2 or vals[1].ndim != 2:
                     raise ValueError("toy.matmul only supports 2D")
@@ -44,6 +47,32 @@ class ParsedProgram:
                 axis = int(inst.attrs["axis"])
                 keepdim = bool(inst.attrs.get("keepdim", False))
                 out = np.mean(vals[0], axis=axis, keepdims=keepdim)
+            elif inst.op == "toy.conv2d":
+                stride = (int(inst.attrs["stride_h"]), int(inst.attrs["stride_w"]))
+                padding = (int(inst.attrs["pad_h"]), int(inst.attrs["pad_w"]))
+                bias = vals[2] if len(vals) == 3 else None
+                out = _conv2d_nchw(vals[0], vals[1], bias, stride, padding)
+            elif inst.op == "toy.avg_pool2d":
+                kernel = (int(inst.attrs["kernel_h"]), int(inst.attrs["kernel_w"]))
+                stride = (int(inst.attrs["stride_h"]), int(inst.attrs["stride_w"]))
+                out = _pool2d_nchw(vals[0], kernel, stride, mode="avg")
+            elif inst.op == "toy.max_pool2d":
+                kernel = (int(inst.attrs["kernel_h"]), int(inst.attrs["kernel_w"]))
+                stride = (int(inst.attrs["stride_h"]), int(inst.attrs["stride_w"]))
+                out = _pool2d_nchw(vals[0], kernel, stride, mode="max")
+            elif inst.op == "toy.flatten":
+                start_dim = int(inst.attrs["start_dim"])
+                end_dim = int(inst.attrs["end_dim"])
+                s, e = _normalize_flatten_dims(start_dim, end_dim, vals[0].ndim)
+                pre = vals[0].shape[:s]
+                mid = int(np.prod(vals[0].shape[s : e + 1], dtype=np.int64))
+                post = vals[0].shape[e + 1 :]
+                out = vals[0].reshape(pre + (mid,) + post)
+            elif inst.op == "toy.reshape":
+                rank = int(inst.attrs["shape_rank"])
+                target = tuple(int(inst.attrs[f"shape_{i}"]) for i in range(rank))
+                out_shape = _infer_reshape(vals[0].shape, target)
+                out = vals[0].reshape(out_shape)
             else:
                 raise NotImplementedError(f"unsupported op in interpreter: {inst.op}")
             env[inst.result] = out

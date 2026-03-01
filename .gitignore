@@ -1,0 +1,35 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging / build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Test / coverage caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Static analysis / lint caches
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Local environments
+.venv/
+venv/
+env/
+
+# Local data / runtime cache
+.cache/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
