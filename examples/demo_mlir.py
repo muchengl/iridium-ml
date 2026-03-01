@@ -21,9 +21,9 @@ def tiny_kernel(x: Tensor, w: Tensor, b: Tensor) -> Tensor:
 
 def main() -> None:
     rng = np.random.default_rng(1)
-    x = Tensor(rng.normal(size=(2, 3)).astype(np.float32))
-    w = Tensor(rng.normal(size=(3, 2)).astype(np.float32))
-    b = Tensor(rng.normal(size=(2,)).astype(np.float32))
+    x = Tensor(rng.normal(size=(5, 6)).astype(np.float32))
+    w = Tensor(rng.normal(size=(6, 3)).astype(np.float32))
+    b = Tensor(rng.normal(size=(5, 3)).astype(np.float32))
 
     out = tiny_kernel(x, w, b)
     mlir_text = tiny_kernel.last_mlir

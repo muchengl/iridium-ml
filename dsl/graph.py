@@ -11,8 +11,14 @@ class Op(str, Enum):
     ADD = "add"
     MUL = "mul"
     RELU = "relu"
+    TANH = "tanh"
     REDUCE_MEAN = "reduce_mean"
     MATMUL = "matmul"
+    CONV2D = "conv2d"
+    AVG_POOL2D = "avg_pool2d"
+    MAX_POOL2D = "max_pool2d"
+    FLATTEN = "flatten"
+    RESHAPE = "reshape"
 
 
 @dataclass(frozen=True)
