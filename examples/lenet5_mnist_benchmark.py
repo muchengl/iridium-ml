@@ -20,6 +20,9 @@ DEFAULT_MODEL_URL = (
 )
 
 
+# JIT entry:
+# - first call: trace Python kernel -> Graph IR -> MLIR text -> parse to interpreter program
+# - later calls (same shape/dtype): cache hit and directly run parsed program
 @jit(trace=False)
 def lenet_kernel(
     x: Tensor,
@@ -180,6 +183,7 @@ def run(args: argparse.Namespace) -> None:
         weights["fc3_b"],
     )
 
+    # First JIT call: includes compile path (trace + MLIR emit/parse) and one interpreter execution.
     t0 = time.perf_counter()
     logits_first = lenet_kernel(x_tensor, *weight_args).numpy()
     first_ms = (time.perf_counter() - t0) * 1000.0
@@ -187,6 +191,7 @@ def run(args: argparse.Namespace) -> None:
     pred_first = np.argmax(logits_first, axis=1)
     acc_first = float(np.mean(pred_first == y))
 
+    # Steady-state calls: expected to be cache hits, still executed by the MLIR interpreter backend.
     times: list[float] = []
     for _ in range(args.iters):
         ts = time.perf_counter()
@@ -206,6 +211,7 @@ def run(args: argparse.Namespace) -> None:
     print(f"steady avg latency: {avg_ms:.2f} ms")
     print(f"steady throughput: {throughput:.2f} samples/s")
     print(f"steady accuracy: {acc:.4f}")
+    # True means this call used JIT cache (no retrace/re-emit); execution remains interpreter-based.
     print(f"cache hit on last call: {lenet_kernel.last_call_cache_hit}")
 
 
