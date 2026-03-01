@@ -1,0 +1,18 @@
+{
+  "case_name": "mean_pool_head",
+  "dtype": "float32",
+  "shape": [
+    2,
+    2
+  ],
+  "values": [
+    [
+      1.0,
+      0.0
+    ],
+    [
+      1.0,
+      0.0
+    ]
+  ]
+}
